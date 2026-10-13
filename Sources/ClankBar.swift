@@ -221,7 +221,8 @@ enum ClaudeAPI {
         guard let s else { return nil }
         // claude.ai sends microseconds, which ISO8601DateFormatter can't parse.
         let trimmed = s.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        return ISO8601DateFormatter().date(from: trimmed)
+        // Resets sit on whole minutes but can arrive as e.g. 12:09:59.98; round like the desktop app does.
+        return ISO8601DateFormatter().date(from: trimmed).map { Date(timeIntervalSince1970: ($0.timeIntervalSince1970 / 60).rounded() * 60) }
     }
 
     static func fetch() async throws -> Snapshot {
