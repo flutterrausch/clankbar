@@ -31,3 +31,7 @@ Needs Xcode's Swift toolchain on macOS 14 or later. This builds `ClankBar.app` a
 - The usage endpoint is undocumented and may change or break at any time.
 - Claude's consumer terms restrict automated access. A read-only usage check is low-risk, but use it at your own discretion.
 - Not affiliated with Anthropic.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
