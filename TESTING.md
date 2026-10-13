@@ -15,8 +15,8 @@ Switching works in both directions (tested 2026-10-13): each account shows its o
    - Expected: same as step 1, and the menu bar icon updates to that account's bars.
 5. ⏳ While behind pace, the orange "Runs out in …" line appears only together with "… in deficit".
 
-6. ⏳ Other accounts: after switching once to each account, the inactive one shows as a compact block with "as of <time>".
-   - Expected: its numbers match what it showed when it was last active; a window whose reset time has passed shows 100% and "reset".
+6. ⏳ Other accounts: after switching once to each account, the inactive one shows dimmed in the same layout, with "as of <time>".
+   - Expected: its numbers match what it showed when it was last active; a window whose reset time has passed shows "100% left" and "Reset at <time>".
 
 ## If something's off
 

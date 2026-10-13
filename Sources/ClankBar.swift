@@ -395,7 +395,9 @@ struct LimitView: View {
             }
             UsageBar(used: limit.used, expected: limit.expected)
             HStack {
-                if let r = limit.resetsAt { Text("Reset \(relative(r))") } else { Text("Not started yet") }
+                if let r = limit.resetsAt { Text("Reset \(relative(r))") }
+                else if let r = limit.wasResetAt { Text("Reset at \(clock(r))") }
+                else { Text("Not started yet") }
                 Spacer()
                 if let p = limit.paceText {
                     Text(p).foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
@@ -410,32 +412,23 @@ struct LimitView: View {
     }
 }
 
-/// Compact block for an account that isn't active in the desktop app, from its last-seen numbers.
+/// An account that isn't active in the desktop app, from its last-seen numbers: same layout, dimmed.
 struct OtherAccountView: View {
     let snapshot: Snapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Label(snapshot.email, systemImage: "person.crop.circle").font(.system(size: 12))
                 Spacer()
-                Text("as of \(clock(snapshot.updated))").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("as of \(clock(snapshot.updated))").font(.system(size: 11))
             }
-            ForEach(snapshot.limits.prefix(2).map { $0.aged() }) { l in
-                HStack(spacing: 8) {
-                    Text(l.label).frame(width: 52, alignment: .leading)
-                    UsageBar(used: l.used, expected: nil)
-                    Text("\(Int(l.left.rounded()))%").monospacedDigit().frame(width: 34, alignment: .trailing)
-                    Group {
-                        if l.wasResetAt != nil { Text("reset") }
-                        else if let r = l.resetsAt { Text("↻ \(clock(r))") }
-                        else { Text("–") }
-                    }
-                    .foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
-                }
-                .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            ForEach(snapshot.limits.map { $0.aged() }) { l in
+                LimitView(limit: l)
             }
         }
+        .opacity(0.55)
     }
 }
 
