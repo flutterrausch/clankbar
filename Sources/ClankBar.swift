@@ -328,10 +328,6 @@ final class UsageModel: ObservableObject {
         default: false
         }
     }
-
-    func refreshIfStale() {
-        if snapshot.map({ Date().timeIntervalSince($0.updated) > 60 }) ?? true { refresh() }
-    }
 }
 
 // MARK: - Menu bar icon
@@ -436,6 +432,7 @@ struct OtherAccountView: View {
 struct PopoverView: View {
     @ObservedObject var model: UsageModel
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage("refreshOnOpen") private var refreshOnOpen = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -484,6 +481,8 @@ struct PopoverView: View {
                         try? on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
                         launchAtLogin = SMAppService.mainApp.status == .enabled
                     }
+                Toggle(isOn: $refreshOnOpen) { Text("Refresh on Open").font(.system(size: 13)) }
+                    .toggleStyle(.checkbox).focusable(false).padding(.horizontal, 6).padding(.vertical, 3)
                 MenuRow(title: "Quit", icon: "power") { NSApp.terminate(nil) }
             }
         }
@@ -612,7 +611,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func open() {
-        model.refreshIfStale()
+        if UserDefaults.standard.object(forKey: "refreshOnOpen") as? Bool ?? true { model.refresh() }
         layoutPanel()
         panel.orderFrontRegardless()
         panel.makeKey()
