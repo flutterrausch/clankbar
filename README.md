@@ -1,4 +1,4 @@
-# Clankbar
+# ClankBar
 
 A tiny macOS menu bar app that shows your Claude 5-hour and weekly limits for **the account the Claude desktop app is signed into**.
 
@@ -6,7 +6,7 @@ A tiny macOS menu bar app that shows your Claude 5-hour and weekly limits for **
 
 Usage trackers like CodexBar and OpenUsage get their Claude login from your browser or from Claude Code. If the Claude desktop app is signed into a different account, they show the wrong numbers, and switching accounts in the app doesn't change what they display.
 
-Clankbar reads only the desktop app's own claude.ai session, fresh on every refresh, so it always shows the account you're actually using in the app.
+ClankBar reads only the desktop app's own claude.ai session, fresh on every refresh, so it always shows the account you're actually using in the app.
 
 ## What it shows
 
@@ -19,7 +19,7 @@ Clankbar reads only the desktop app's own claude.ai session, fresh on every refr
 bash build.sh
 ```
 
-Needs Xcode's Swift toolchain on macOS 14 or later. This builds `Clankbar.app` and installs it to `/Applications`. The app has no dependencies, updater or analytics.
+Needs Xcode's Swift toolchain on macOS 14 or later. This builds `ClankBar.app` and installs it to `/Applications`. The app has no dependencies, updater or analytics.
 
 ## How it works and caveats
 

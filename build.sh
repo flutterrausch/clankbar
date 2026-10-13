@@ -1,14 +1,14 @@
 #!/bin/bash
-# Builds Clankbar.app and installs it to /Applications.
+# Builds ClankBar.app and installs it to /Applications.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP=build/Clankbar.app
+APP=build/ClankBar.app
 if [ -d build ]; then trash build; fi
 mkdir -p "$APP/Contents/MacOS"
 
 swiftc -O -parse-as-library -swift-version 5 -target arm64-apple-macos14.0 \
-  -o "$APP/Contents/MacOS/Clankbar" Sources/Clankbar.swift
+  -o "$APP/Contents/MacOS/ClankBar" Sources/ClankBar.swift
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -16,9 +16,9 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key><string>local.clankbar</string>
-  <key>CFBundleName</key><string>Clankbar</string>
-  <key>CFBundleDisplayName</key><string>Clankbar</string>
-  <key>CFBundleExecutable</key><string>Clankbar</string>
+  <key>CFBundleName</key><string>ClankBar</string>
+  <key>CFBundleDisplayName</key><string>ClankBar</string>
+  <key>CFBundleExecutable</key><string>ClankBar</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
@@ -30,8 +30,8 @@ EOF
 
 codesign --force --sign - "$APP"
 
-pkill -x Clankbar 2>/dev/null || true
-if [ -d /Applications/Clankbar.app ]; then trash /Applications/Clankbar.app; fi
+pkill -x ClankBar 2>/dev/null || true
+if [ -d /Applications/ClankBar.app ]; then trash /Applications/ClankBar.app; fi
 cp -R "$APP" /Applications/
-open /Applications/Clankbar.app
-echo "Installed /Applications/Clankbar.app"
+open /Applications/ClankBar.app
+echo "Installed /Applications/ClankBar.app"
