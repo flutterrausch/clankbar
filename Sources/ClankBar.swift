@@ -48,7 +48,7 @@ struct Limit: Identifiable {
     var runsOut: String? {
         guard let resetsAt else { return nil }
         let elapsed = window - resetsAt.timeIntervalSinceNow
-        guard used > 0, elapsed > 300 else { return nil }
+        guard used > 0, elapsed > 300, inDeficit else { return nil }  // keep in line with the pace text
         let runout = elapsed * (100 - used) / used
         guard runout < resetsAt.timeIntervalSinceNow else { return nil }
         return "Runs out in \(relative(Date(timeIntervalSinceNow: runout)))"
@@ -193,6 +193,11 @@ enum ClaudeAPI {
     nonisolated(unsafe) static var emailCache: (session: String, email: String)?
 
     static func get(_ path: String, cookies: [String: String]) async throws -> [String: Any] {
+        guard let json = try await getJSON(path, cookies: cookies) as? [String: Any] else { throw FetchError.badResponse }
+        return json
+    }
+
+    static func getJSON(_ path: String, cookies: [String: String]) async throws -> Any {
         var req = URLRequest(url: URL(string: "https://claude.ai" + path)!, timeoutInterval: 15)
         req.setValue(cookies.map { "\($0.key)=\($0.value)" }.joined(separator: "; "), forHTTPHeaderField: "Cookie")
         req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
@@ -201,8 +206,15 @@ enum ClaudeAPI {
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else { throw FetchError.http(code) }
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw FetchError.badResponse }
-        return json
+        return try JSONSerialization.jsonObject(with: data)
+    }
+
+    /// The account's chat (Pro/Max) organization, for when lastActiveOrg doesn't belong to the session.
+    static func chatOrg(cookies: [String: String]) async throws -> String {
+        let orgs = try await getJSON("/api/organizations", cookies: cookies) as? [[String: Any]] ?? []
+        let chat = orgs.first { ($0["capabilities"] as? [String])?.contains("chat") == true } ?? orgs.first
+        guard let id = chat?["uuid"] as? String else { throw FetchError.badResponse }
+        return id
     }
 
     static func parseDate(_ s: String?) -> Date? {
@@ -214,8 +226,15 @@ enum ClaudeAPI {
 
     static func fetch() async throws -> Snapshot {
         let ck = try ClaudeDesktop.cookies()
-        guard let session = ck["sessionKey"], let org = ck["lastActiveOrg"] else { throw FetchError.notSignedIn }
-        let usage = try await get("/api/organizations/\(org)/usage", cookies: ck)
+        guard let session = ck["sessionKey"] else { throw FetchError.notSignedIn }
+        // Right after an account switch, lastActiveOrg can still name the previous account's org.
+        var usage: [String: Any]
+        do {
+            guard let org = ck["lastActiveOrg"] else { throw FetchError.http(403) }
+            usage = try await get("/api/organizations/\(org)/usage", cookies: ck)
+        } catch FetchError.http(let code) where code == 403 || code == 404 {
+            usage = try await get("/api/organizations/\(try await chatOrg(cookies: ck))/usage", cookies: ck)
+        }
 
         // The account only changes with the session cookie, so look it up once per session.
         var email = emailCache?.session == session ? emailCache!.email : nil
@@ -238,8 +257,10 @@ enum ClaudeAPI {
 final class UsageModel: ObservableObject {
     @Published var snapshot: Snapshot?
     @Published var error: String?
+    @Published var notice: String?
     @Published var loading = false
     var onChange: (() -> Void)?
+    private var retries = 0
 
     func refresh() {
         guard !loading else { return }
@@ -248,11 +269,31 @@ final class UsageModel: ObservableObject {
             do {
                 snapshot = try await ClaudeAPI.fetch()
                 error = nil
+                notice = nil
+                retries = 0
             } catch {
-                self.error = error.localizedDescription
+                // While the desktop app switches accounts its cookies are briefly stale or
+                // half-written. Retry quietly a few times before calling it an error.
+                if Self.isTransient(error), retries < 6 {
+                    retries += 1
+                    notice = "Waiting for Claude desktop to finish switching accounts…"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.refresh() }
+                } else {
+                    self.error = error.localizedDescription
+                    notice = nil
+                    retries = 0
+                }
             }
             loading = false
             onChange?()
+        }
+    }
+
+    static func isTransient(_ error: Error) -> Bool {
+        switch error as? FetchError {
+        case .http(let code): code == 401 || code == 403
+        case .notSignedIn: true
+        default: false
         }
     }
 
@@ -322,7 +363,7 @@ struct LimitView: View {
             }
             UsageBar(used: limit.used, expected: limit.expected)
             HStack {
-                if let r = limit.resetsAt { Text("Resets in \(relative(r))") }
+                if let r = limit.resetsAt { Text("Resets in \(relative(r))") } else { Text("Not started yet") }
                 Spacer()
                 if let p = limit.paceText {
                     Text("Pace: \(p)").foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
@@ -359,7 +400,10 @@ struct PopoverView: View {
                 Label(s.email, systemImage: "person.crop.circle")
                     .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, -8)
             }
-            if let e = model.error {
+            if let n = model.notice {
+                Label(n, systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if let e = model.error {
                 Label(e, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 12)).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
