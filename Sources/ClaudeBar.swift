@@ -403,12 +403,22 @@ struct MenuRow: View {
 
 // MARK: - App
 
+/// Borderless dropdown panel. Positioned by hand below the menu bar instead of an
+/// NSPopover, which anchors to the status button and lands on top of the menu bar
+/// when a menu bar manager (Hidden Bar) has collapsed the icon.
+final class DropdownPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = UsageModel()
-    let popover = NSPopover()
     var item: NSStatusItem!
+    var panel: DropdownPanel!
+    var host: NSHostingView<PopoverView>!
     var timer: Timer?
+    var outsideClick: Any?
+    var escapeKey: Any?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -417,11 +427,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.target = self
         item.button?.action = #selector(toggle)
 
-        popover.behavior = .transient
-        popover.animates = false
-        popover.contentViewController = NSHostingController(rootView: PopoverView(model: model))
+        host = NSHostingView(rootView: PopoverView(model: model))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        let fx = NSVisualEffectView()
+        fx.material = .popover
+        fx.state = .active
+        fx.wantsLayer = true
+        fx.layer?.cornerRadius = 10
+        fx.layer?.masksToBounds = true
+        fx.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            host.topAnchor.constraint(equalTo: fx.topAnchor),
+            host.bottomAnchor.constraint(equalTo: fx.bottomAnchor),
+        ])
+        panel = DropdownPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                              backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .popUpMenu
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient]
+        panel.contentView = fx
 
-        model.onChange = { [weak self] in self?.updateIcon() }
+        model.onChange = { [weak self] in
+            self?.updateIcon()
+            if self?.panel.isVisible == true { self?.layoutPanel() }
+        }
         model.refresh()
         if CommandLine.arguments.contains("--open") {  // for screenshots / testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.toggle() }
@@ -440,15 +473,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .map { "\($0.label): \(Int($0.left.rounded()))% left" }.joined(separator: "\n")
     }
 
-    @objc func toggle() {
-        if popover.isShown {
-            popover.performClose(nil)
-        } else if let button = item.button {
-            model.refreshIfStale()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
-            NSApp.activate()
+    /// Just below the menu bar, centered under the icon when it's on screen, else at the right edge.
+    func layoutPanel() {
+        let size = host.fittingSize
+        let iconFrame = item.button?.window?.frame
+        let screen = item.button?.window?.screen ?? NSScreen.main!
+        let area = screen.visibleFrame
+        var x = area.maxX - size.width - 8
+        if let f = iconFrame, f.minX >= screen.frame.minX, f.maxX <= screen.frame.maxX {
+            x = f.midX - size.width / 2
         }
+        x = min(max(x, area.minX + 8), area.maxX - size.width - 8)
+        panel.setFrame(NSRect(x: x, y: area.maxY - 4 - size.height, width: size.width, height: size.height), display: true)
+    }
+
+    @objc func toggle() {
+        panel.isVisible ? close() : open()
+    }
+
+    func open() {
+        model.refreshIfStale()
+        layoutPanel()
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in self?.close() }
+        }
+        escapeKey = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            if e.keyCode == 53 { self?.close(); return nil }
+            return e
+        }
+    }
+
+    func close() {
+        panel.orderOut(nil)
+        if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
+        if let m = escapeKey { NSEvent.removeMonitor(m); escapeKey = nil }
     }
 }
 
