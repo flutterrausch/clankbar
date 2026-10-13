@@ -16,6 +16,15 @@ ClankBar reads only the desktop app's own claude.ai session, fresh on every refr
 - **Dropdown:** a bar for each limit with a pace marker, % left, reset time, whether you're ahead or behind an even pace, and a "Runs out in …" warning when you're on track to hit the limit early.
 - **Other accounts:** every account ClankBar has seen is shown below in the same layout, dimmed, with its last-seen numbers marked "as of …". Windows whose reset time has passed since then show as reset. It only stores those numbers, never logins.
 
+## Switching accounts
+
+The Claude desktop app has no account switcher, so you log out and back in:
+
+1. In the Claude desktop app, click your name at the bottom left and choose **Log out**.
+2. Sign in with the other account.
+
+ClankBar picks up the new account on its next refresh, within 2 minutes. To see it right away, click **Refresh** in the dropdown. The previous account moves to the dimmed list below.
+
 ## Build
 
 ```bash
