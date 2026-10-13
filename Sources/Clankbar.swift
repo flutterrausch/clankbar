@@ -1,4 +1,4 @@
-// ClaudeBar: menu bar app showing the 5-hour and weekly limits of whatever
+// Clankbar: menu bar app showing the 5-hour and weekly limits of whatever
 // account the Claude desktop app is signed into. Reads the app's claude.ai cookies
 // (decrypted with the "Claude Safe Storage" Keychain item) on every refresh, so it
 // follows account switches. Visuals follow CodexBar: two stacked "remaining" bars.
@@ -441,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "ClaudeBar"  // keeps the position after you Cmd-drag the icon
+        item.autosaveName = "Clankbar"  // keeps the position after you Cmd-drag the icon
         item.button?.image = statusIcon(session: nil, weekly: nil)
         item.button?.target = self
         item.button?.action = #selector(toggle)
