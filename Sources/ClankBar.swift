@@ -359,23 +359,24 @@ func statusIcon(session: Double?, weekly: Double?) -> NSImage {
 
 let claudeOrange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
 
+/// Fills with what's left, like the menu bar icon, so it shrinks as you use the limit.
 struct UsageBar: View {
-    let used: Double
-    let expected: Double?
+    let left: Double
+    /// What would be left if you'd spent evenly so far. Fill ending left of it means you're behind pace.
+    let expectedLeft: Double?
 
     var body: some View {
         GeometryReader { g in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.2))
                 Capsule()
-                    .fill(used >= 90 ? Color.red : claudeOrange)
-                    .frame(width: max(used > 0 ? 6 : 0, g.size.width * used / 100))
-                if let expected {
-                    // Pace marker: where you'd be if spending evenly.
+                    .fill(left <= 10 ? Color.red : claudeOrange)
+                    .frame(width: max(left > 0 ? 6 : 0, g.size.width * left / 100))
+                if let expectedLeft {
                     RoundedRectangle(cornerRadius: 1)
                         .fill(Color.primary.opacity(0.6))
                         .frame(width: 2, height: g.size.height + 4)
-                        .offset(x: min(g.size.width - 2, max(0, g.size.width * expected / 100 - 1)))
+                        .offset(x: min(g.size.width - 2, max(0, g.size.width * expectedLeft / 100 - 1)))
                 }
             }
         }
@@ -393,7 +394,7 @@ struct LimitView: View {
                 Spacer()
                 Text("\(Int(limit.left.rounded()))% left").font(.system(size: 12)).monospacedDigit()
             }
-            UsageBar(used: limit.used, expected: limit.expected)
+            UsageBar(left: limit.left, expectedLeft: limit.expected.map { 100 - $0 })
             HStack {
                 if let r = limit.resetsAt { Text("Reset \(relative(r))") }
                 else if let r = limit.wasResetAt { Text("Reset at \(clock(r))") }
