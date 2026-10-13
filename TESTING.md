@@ -10,7 +10,7 @@ Switching works in both directions (tested 2026-10-13): each account shows its o
 2. ⏳ The second account hasn't used its 5-hour window yet.
    - Expected: Session shows "100% left" and "Not started yet" (no blank line). Missed: the window had already started. Retry when an account has been idle for 5+ hours.
 3. ✅ Send one message on the second account, then click Refresh.
-   - Expected: Session gets a reset time; pace and projection lines appear after ~5 minutes.
+   - Expected: Session gets a reset time; the pace line appears after ~5 minutes.
 4. ✅ Switch back to the first account.
    - Expected: same as step 1, and the menu bar icon updates to that account's bars.
 5. ⏳ While behind pace, the orange "Runs out in …" line appears only together with "Pace: … in deficit".

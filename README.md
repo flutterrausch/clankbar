@@ -13,7 +13,7 @@ ClankBar reads only the desktop app's own claude.ai session, fresh on every refr
 ## What it shows
 
 - **Menu bar:** two stacked bars showing what's left, session on top and week below (like CodexBar).
-- **Dropdown:** a bar for each limit with a pace marker, % left, reset time, whether you're ahead or behind an even pace, and either "At this rate: ~X% by reset" or a "Runs out in …" warning.
+- **Dropdown:** a bar for each limit with a pace marker, % left, reset time, whether you're ahead or behind an even pace, and a "Runs out in …" warning when you're on track to hit the limit early.
 
 ## Build
 

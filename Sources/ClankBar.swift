@@ -36,14 +36,6 @@ struct Limit: Identifiable {
 
     var inDeficit: Bool { (expected.map { used - $0 >= 2 }) ?? false }
 
-    /// Usage at reset if the average rate so far continues.
-    var projectedAtReset: Double? {
-        guard let resetsAt else { return nil }
-        let elapsed = window - resetsAt.timeIntervalSinceNow
-        guard elapsed > 300 else { return nil }
-        return used / elapsed * window
-    }
-
     /// Only set when the average rate so far would hit the limit before the reset.
     var runsOut: String? {
         guard let resetsAt else { return nil }
@@ -374,8 +366,6 @@ struct LimitView: View {
             .foregroundStyle(.secondary)
             if let r = limit.runsOut {
                 Text(r).font(.system(size: 11)).foregroundStyle(.orange)
-            } else if let p = limit.projectedAtReset {
-                Text("At this rate: ~\(Int(p.rounded()))% by reset").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }
