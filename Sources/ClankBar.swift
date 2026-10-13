@@ -359,7 +359,7 @@ struct LimitView: View {
                 if let r = limit.resetsAt { Text("Resets in \(relative(r))") } else { Text("Not started yet") }
                 Spacer()
                 if let p = limit.paceText {
-                    Text("Pace: \(p)").foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
+                    Text(p).foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
                 }
             }
             .font(.system(size: 11))
