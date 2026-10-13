@@ -36,12 +36,14 @@ struct Limit: Identifiable {
 
     var inDeficit: Bool { (expected.map { used - $0 >= 2 }) ?? false }
 
-    var projection: String? {
+    /// Only set when the average rate so far would hit the limit before the reset.
+    var runsOut: String? {
         guard let resetsAt else { return nil }
         let elapsed = window - resetsAt.timeIntervalSinceNow
-        guard used > 0, elapsed > 300 else { return "Lasts until reset" }
-        let runout = elapsed * (100 - used) / used  // time left at the average rate so far
-        return runout >= resetsAt.timeIntervalSinceNow ? "Lasts until reset" : "Runs out in \(duration(runout))"
+        guard used > 0, elapsed > 300 else { return nil }
+        let runout = elapsed * (100 - used) / used
+        guard runout < resetsAt.timeIntervalSinceNow else { return nil }
+        return "Runs out in \(relative(Date(timeIntervalSinceNow: runout)))"
     }
 }
 
@@ -49,6 +51,13 @@ struct Snapshot {
     let email: String
     let limits: [Limit]
     let updated: Date
+}
+
+/// "4h 1m (12:49)", or "2d 11h (Thu 19:59)" when it's not today.
+func relative(_ date: Date) -> String {
+    let f = DateFormatter()
+    f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(date) ? "HHmm" : "EEEHHmm")
+    return "\(duration(date.timeIntervalSinceNow)) (\(f.string(from: date)))"
 }
 
 func duration(_ t: TimeInterval) -> String {
@@ -305,7 +314,7 @@ struct LimitView: View {
             }
             UsageBar(used: limit.used, expected: limit.expected)
             HStack {
-                if let r = limit.resetsAt { Text("Resets in \(duration(r.timeIntervalSinceNow))") }
+                if let r = limit.resetsAt { Text("Resets in \(relative(r))") }
                 Spacer()
                 if let p = limit.paceText {
                     Text("Pace: \(p)").foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
@@ -313,8 +322,8 @@ struct LimitView: View {
             }
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
-            if let proj = limit.projection {
-                Text(proj).font(.system(size: 11)).foregroundStyle(.secondary)
+            if let r = limit.runsOut {
+                Text(r).font(.system(size: 11)).foregroundStyle(.orange)
             }
         }
     }
