@@ -356,7 +356,7 @@ struct LimitView: View {
             }
             UsageBar(used: limit.used, expected: limit.expected)
             HStack {
-                if let r = limit.resetsAt { Text("Resets in \(relative(r))") } else { Text("Not started yet") }
+                if let r = limit.resetsAt { Text("Reset \(relative(r))") } else { Text("Not started yet") }
                 Spacer()
                 if let p = limit.paceText {
                     Text(p).foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
