@@ -11,12 +11,14 @@ import SwiftUI
 
 // MARK: - Model
 
-struct Limit: Identifiable {
+struct Limit: Identifiable, Codable {
     let id: String
     let label: String
     let used: Double
     let resetsAt: Date?
     let window: TimeInterval
+    /// Set on a stored limit whose window has reset since it was last read.
+    var wasResetAt: Date? = nil
 
     var left: Double { max(0, 100 - used) }
 
@@ -45,19 +47,51 @@ struct Limit: Identifiable {
         guard runout < resetsAt.timeIntervalSinceNow else { return nil }
         return "Runs out in \(relative(Date(timeIntervalSinceNow: runout)))"
     }
+
+    /// A stored value brought up to date: once the reset time has passed, the window is empty again.
+    func aged() -> Limit {
+        guard let resetsAt, resetsAt <= Date() else { return self }
+        return Limit(id: id, label: label, used: 0, resetsAt: nil, window: window, wasResetAt: resetsAt)
+    }
 }
 
-struct Snapshot {
+struct Snapshot: Codable {
     let email: String
     let limits: [Limit]
     let updated: Date
 }
 
-/// "4h 1m (12:49)", or "2d 11h (Thu 19:59)" when it's not today.
-func relative(_ date: Date) -> String {
+/// Last-seen numbers per account (no credentials), so accounts that aren't active
+/// in the desktop app right now can still be shown.
+enum AccountStore {
+    static let key = "accounts"
+
+    static func all() -> [String: Snapshot] {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [:] }
+        return (try? JSONDecoder().decode([String: Snapshot].self, from: data)) ?? [:]
+    }
+
+    static func save(_ s: Snapshot) {
+        var accounts = all()
+        accounts[s.email] = s
+        if let data = try? JSONEncoder().encode(accounts) { UserDefaults.standard.set(data, forKey: key) }
+    }
+
+    static func others(than email: String?) -> [Snapshot] {
+        all().values.filter { $0.email != email }.sorted { $0.email < $1.email }
+    }
+}
+
+/// "12:49", or "Thu 19:59" when it's not today.
+func clock(_ date: Date) -> String {
     let f = DateFormatter()
     f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(date) ? "HHmm" : "EEEHHmm")
-    return "\(duration(date.timeIntervalSinceNow)) (\(f.string(from: date)))"
+    return f.string(from: date)
+}
+
+/// "4h 1m (12:49)", or "2d 11h (Thu 19:59)" when it's not today.
+func relative(_ date: Date) -> String {
+    "\(duration(date.timeIntervalSinceNow)) (\(clock(date)))"
 }
 
 func duration(_ t: TimeInterval) -> String {
@@ -182,6 +216,7 @@ enum ClaudeAPI {
         ("seven_day_opus", "Weekly · Opus", 7 * 86400),
         ("seven_day_sonnet", "Weekly · Sonnet", 7 * 86400),
     ]
+    static let unknownEmail = "Unknown account"
     nonisolated(unsafe) static var emailCache: (session: String, email: String)?
 
     static func get(_ path: String, cookies: [String: String]) async throws -> [String: Any] {
@@ -240,7 +275,7 @@ enum ClaudeAPI {
             guard let l = usage[key] as? [String: Any], let used = l["utilization"] as? Double else { return nil }
             return Limit(id: key, label: label, used: used, resetsAt: parseDate(l["resets_at"] as? String), window: window)
         }
-        return Snapshot(email: email ?? "Unknown account", limits: limits, updated: Date())
+        return Snapshot(email: email ?? unknownEmail, limits: limits, updated: Date())
     }
 }
 
@@ -251,6 +286,7 @@ final class UsageModel: ObservableObject {
     @Published var snapshot: Snapshot?
     @Published var error: String?
     @Published var notice: String?
+    @Published var others = AccountStore.others(than: nil)
     @Published var loading = false
     var onChange: (() -> Void)?
     private var retries = 0
@@ -260,7 +296,10 @@ final class UsageModel: ObservableObject {
         loading = true
         Task {
             do {
-                snapshot = try await ClaudeAPI.fetch()
+                let s = try await ClaudeAPI.fetch()
+                snapshot = s
+                if s.email != ClaudeAPI.unknownEmail { AccountStore.save(s) }
+                others = AccountStore.others(than: s.email)
                 error = nil
                 notice = nil
                 retries = 0
@@ -371,6 +410,35 @@ struct LimitView: View {
     }
 }
 
+/// Compact block for an account that isn't active in the desktop app, from its last-seen numbers.
+struct OtherAccountView: View {
+    let snapshot: Snapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(snapshot.email, systemImage: "person.crop.circle").font(.system(size: 12))
+                Spacer()
+                Text("as of \(clock(snapshot.updated))").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            ForEach(snapshot.limits.prefix(2).map { $0.aged() }) { l in
+                HStack(spacing: 8) {
+                    Text(l.label).frame(width: 52, alignment: .leading)
+                    UsageBar(used: l.used, expected: nil)
+                    Text("\(Int(l.left.rounded()))%").monospacedDigit().frame(width: 34, alignment: .trailing)
+                    Group {
+                        if l.wasResetAt != nil { Text("reset") }
+                        else if let r = l.resetsAt { Text("↻ \(clock(r))") }
+                        else { Text("–") }
+                    }
+                    .foregroundStyle(.secondary).frame(width: 70, alignment: .trailing)
+                }
+                .font(.system(size: 11))
+            }
+        }
+    }
+}
+
 struct PopoverView: View {
     @ObservedObject var model: UsageModel
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -405,6 +473,10 @@ struct PopoverView: View {
                 }
             } else if model.error == nil {
                 Text("Loading…").foregroundStyle(.secondary)
+            }
+            ForEach(model.others, id: \.email) { o in
+                Divider()
+                OtherAccountView(snapshot: o)
             }
             Divider()
             VStack(alignment: .leading, spacing: 2) {
