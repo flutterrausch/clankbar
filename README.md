@@ -8,7 +8,7 @@ A tiny macOS menu bar app that shows your Claude 5-hour and weekly limits for **
 
 **Multiple accounts.** If you switch between Claude accounts in the desktop app, for example a personal and a work account, you want to see the limits of whichever account you're on at the moment.
 
-Usage trackers like CodexBar and OpenUsage get their Claude login from your browser or from Claude Code, not from the desktop app. So after a switch they keep showing the old account.
+**Most usage trackers are built for Claude Code, not the desktop app.** Tools like CodexBar and OpenUsage get their Claude login from Claude Code or your browser. They don't see which account the desktop app is signed into, so after you switch accounts there they keep showing the old one.
 
 ClankBar reads only the desktop app's own claude.ai session, fresh on every refresh, so it follows your account switches.
 
