@@ -353,10 +353,17 @@ func statusIcon(session: Double?, weekly: Double?) -> NSImage {
 
 // MARK: - Popover UI
 
-let claudeOrange = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
+func hex(_ v: UInt32) -> Color {
+    Color(red: Double(v >> 16 & 0xFF) / 255, green: Double(v >> 8 & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+}
+
+/// Green while you're fine, red when you're behind pace or nearly out.
+let goodGradient = [hex(0x9BEA5A), hex(0x22C98A)]  // lime → emerald
+let badGradient = [hex(0xFF8A5C), hex(0xFF3D6E)]   // coral → raspberry
 
 /// Fills with what's left, like the menu bar icon, so it shrinks as you use the limit.
 struct UsageBar: View {
+    let bad: Bool
     let left: Double
     /// What would be left if you'd spent evenly so far. Fill ending left of it means you're behind pace.
     let expectedLeft: Double?
@@ -366,7 +373,8 @@ struct UsageBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.2))
                 Capsule()
-                    .fill(left <= 10 ? Color.red : claudeOrange)
+                    .fill(LinearGradient(colors: bad ? badGradient : goodGradient,
+                                         startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(left > 0 ? 6 : 0, g.size.width * left / 100))
                 if let expectedLeft {
                     RoundedRectangle(cornerRadius: 1)
@@ -390,7 +398,7 @@ struct LimitView: View {
                 Spacer()
                 Text("\(Int(limit.left.rounded()))% left").font(.system(size: 12)).monospacedDigit()
             }
-            UsageBar(left: limit.left, expectedLeft: limit.expected.map { 100 - $0 })
+            UsageBar(bad: limit.left <= 10 || limit.inDeficit, left: limit.left, expectedLeft: limit.expected.map { 100 - $0 })
             HStack {
                 if let r = limit.resetsAt { Text("Reset \(relative(r))") }
                 else if let r = limit.wasResetAt { Text("Reset at \(clock(r))") }
@@ -412,11 +420,12 @@ struct LimitView: View {
 /// An account that isn't active in the desktop app, from its last-seen numbers: same layout, dimmed.
 struct OtherAccountView: View {
     let snapshot: Snapshot
+    let email: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Label(snapshot.email, systemImage: "person.crop.circle").font(.system(size: 12))
+                Label(email, systemImage: "person.crop.circle").font(.system(size: 12))
                 Spacer()
                 Text("as of \(clock(snapshot.updated))").font(.system(size: 11))
             }
@@ -433,6 +442,9 @@ struct PopoverView: View {
     @ObservedObject var model: UsageModel
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("refreshOnOpen") private var refreshOnOpen = true
+    /// Display-only stand-ins for screenshots; stored accounts keep their real emails.
+    @AppStorage("fakeEmails") private var fakeEmails = false
+    static let fakes = ["alex@example.com", "work@example.com", "sam@example.com", "jo@example.com"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -447,7 +459,7 @@ struct PopoverView: View {
                 }
             }
             if let s = model.snapshot {
-                Label(s.email, systemImage: "person.crop.circle")
+                Label(fakeEmails ? Self.fakes[0] : s.email, systemImage: "person.crop.circle")
                     .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, -8)
             }
             if let n = model.notice {
@@ -465,9 +477,9 @@ struct PopoverView: View {
             } else if model.error == nil {
                 Text("Loading…").foregroundStyle(.secondary)
             }
-            ForEach(model.others, id: \.email) { o in
+            ForEach(Array(model.others.enumerated()), id: \.element.email) { i, o in
                 Divider()
-                OtherAccountView(snapshot: o)
+                OtherAccountView(snapshot: o, email: fakeEmails ? Self.fakes[(i + 1) % Self.fakes.count] : o.email)
             }
             Divider()
             VStack(alignment: .leading, spacing: 2) {
@@ -475,14 +487,13 @@ struct PopoverView: View {
                 MenuRow(title: "Usage Dashboard", icon: "chart.bar") {
                     NSWorkspace.shared.open(URL(string: "https://claude.ai/settings/usage")!)
                 }
-                Toggle(isOn: $launchAtLogin) { Text("Launch at Login").font(.system(size: 13)) }
-                    .toggleStyle(.checkbox).focusable(false).padding(.horizontal, 6).padding(.vertical, 3)
+                CheckRow(title: "Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
                         try? on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
                         launchAtLogin = SMAppService.mainApp.status == .enabled
                     }
-                Toggle(isOn: $refreshOnOpen) { Text("Refresh on Open").font(.system(size: 13)) }
-                    .toggleStyle(.checkbox).focusable(false).padding(.horizontal, 6).padding(.vertical, 3)
+                CheckRow(title: "Refresh on Open", isOn: $refreshOnOpen)
+                CheckRow(title: "Fake Emails (for Screenshots)", isOn: $fakeEmails)
                 MenuRow(title: "Quit", icon: "power") { NSApp.terminate(nil) }
             }
         }
@@ -496,16 +507,30 @@ struct PopoverView: View {
     }
 }
 
+/// A setting shown like a checked NSMenu item: a quiet checkmark instead of a checkbox.
+struct CheckRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        MenuRow(title: title, icon: "checkmark", quietIcon: true, showsIcon: isOn) { isOn.toggle() }
+            .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
 struct MenuRow: View {
     let title: String
     let icon: String
+    var quietIcon = false
+    var showsIcon = true
     let action: () -> Void
     @State private var hover = false
 
     var body: some View {
         Button(action: action) {
             HStack {
-                Image(systemName: icon).frame(width: 16)
+                Image(systemName: icon).frame(width: 16).opacity(showsIcon ? 1 : 0)
+                    .foregroundStyle(quietIcon ? .secondary : .primary)
                 Text(title)
                 Spacer()
             }

@@ -15,6 +15,7 @@ ClankBar reads only the desktop app's own claude.ai session, fresh on every refr
 - **Menu bar:** two stacked bars showing what's left, session on top and week below (like CodexBar).
 - **Dropdown:** a bar for each limit with a pace marker, % left, reset time, whether you're ahead or behind an even pace, and a "Runs out in …" warning when you're on track to hit the limit early.
 - **Other accounts:** every account ClankBar has seen is shown below in the same layout, dimmed, with its last-seen numbers marked "as of …". Windows whose reset time has passed since then show as reset. It only stores those numbers, never logins.
+- **Fake Emails:** a dropdown option that shows placeholder addresses instead of the real ones, for screenshots. It only changes what's displayed.
 
 ## Switching accounts
 
