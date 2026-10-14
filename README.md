@@ -2,6 +2,8 @@
 
 A tiny macOS menu bar app that shows your Claude 5-hour and weekly limits for **the account the Claude desktop app is signed into**.
 
+<img src="docs/screenshot.png" width="346" alt="ClankBar dropdown showing the Session and Weekly limits of the active account and a dimmed second account">
+
 ## Why it exists
 
 **Multiple accounts.** If you switch between Claude accounts in the desktop app, for example a personal and a work account, you want to see the limits of whichever account you're on at the moment.
@@ -13,6 +15,9 @@ ClankBar reads only the desktop app's own claude.ai session, fresh on every refr
 ## What it shows
 
 - **Menu bar:** two stacked bars showing what's left, session on top and week below (like CodexBar).
+
+  <img src="docs/menubar.png" width="116" alt="ClankBar menu bar icon: two stacked bars between other menu bar items">
+
 - **Dropdown:** a bar for each limit with a pace marker, % left, reset time, whether you're ahead or behind an even pace, and a "Runs out in …" warning when you're on track to hit the limit early.
 - **Other accounts:** every account ClankBar has seen is shown below in the same layout, dimmed, with its last-seen numbers marked "as of …". Windows whose reset time has passed since then show as reset. It only stores those numbers, never logins.
 - **Fake Emails:** a dropdown option that shows placeholder addresses instead of the real ones, for screenshots. It only changes what's displayed.
