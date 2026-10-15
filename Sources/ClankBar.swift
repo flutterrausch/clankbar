@@ -448,20 +448,21 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text("ClankBar for Claude").font(.system(size: 15, weight: .bold)).padding(.bottom, 8)
             HStack(alignment: .firstTextBaseline) {
-                Text("Claude").font(.system(size: 15, weight: .bold))
+                if let s = model.snapshot {
+                    Label(fakeEmails ? Self.fakes[0] : s.email, systemImage: "person.crop.circle")
+                        .font(.system(size: 12))
+                }
                 Spacer()
                 if model.loading { ProgressView().controlSize(.small) }
                 else if let s = model.snapshot {
                     TimelineView(.periodic(from: .now, by: 30)) { _ in
-                        Text(updatedText(s.updated)).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(updatedText(s.updated)).font(.system(size: 11))
                     }
                 }
             }
-            if let s = model.snapshot {
-                Label(fakeEmails ? Self.fakes[0] : s.email, systemImage: "person.crop.circle")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, -8)
-            }
+            .foregroundStyle(.secondary)
             if let n = model.notice {
                 Label(n, systemImage: "arrow.triangle.2.circlepath")
                     .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -471,7 +472,6 @@ struct PopoverView: View {
             }
             if let s = model.snapshot {
                 ForEach(s.limits) { l in
-                    Divider()
                     LimitView(limit: l)
                 }
             } else if model.error == nil {
