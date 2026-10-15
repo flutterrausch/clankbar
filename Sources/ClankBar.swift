@@ -57,6 +57,8 @@ struct Limit: Identifiable, Codable {
 
 struct Snapshot: Codable {
     let email: String
+    /// The name the desktop app shows in its lower-left corner; stored, so inactive accounts keep it.
+    var name: String? = nil
     let limits: [Limit]
     let updated: Date
 }
@@ -73,6 +75,8 @@ enum AccountStore {
 
     static func save(_ s: Snapshot) {
         var accounts = all()
+        var s = s
+        if s.name == nil { s.name = accounts[s.email]?.name }  // keep a name once it's known
         accounts[s.email] = s
         if let data = try? JSONEncoder().encode(accounts) { UserDefaults.standard.set(data, forKey: key) }
     }
@@ -217,7 +221,7 @@ enum ClaudeAPI {
         ("seven_day_sonnet", "Weekly · Sonnet", 7 * 86400),
     ]
     static let unknownEmail = "Unknown account"
-    nonisolated(unsafe) static var emailCache: (session: String, email: String)?
+    nonisolated(unsafe) static var accountCache: (session: String, email: String, name: String?)?
 
     static func get(_ path: String, cookies: [String: String]) async throws -> [String: Any] {
         guard let json = try await getJSON(path, cookies: cookies) as? [String: Any] else { throw FetchError.badResponse }
@@ -265,17 +269,22 @@ enum ClaudeAPI {
         }
 
         // The account only changes with the session cookie, so look it up once per session.
-        var email = emailCache?.session == session ? emailCache!.email : nil
-        if email == nil {
-            email = (try? await get("/api/account", cookies: ck))?["email_address"] as? String
-            if let email { emailCache = (session, email) }
+        var email: String?, name: String?
+        if let c = accountCache, c.session == session { (email, name) = (c.email, c.name) }
+        else if let account = try? await get("/api/account", cookies: ck) {
+            email = account["email_address"] as? String
+            // Like the desktop app: the name Claude calls you, else the first name.
+            let display = (account["display_name"] as? String)?.trimmingCharacters(in: .whitespaces)
+            let first = (account["full_name"] as? String)?.split(separator: " ").first.map(String.init)
+            name = display?.isEmpty == false ? display : first
+            if let email { accountCache = (session, email, name) }
         }
 
         let limits = limits.compactMap { key, label, window -> Limit? in
             guard let l = usage[key] as? [String: Any], let used = l["utilization"] as? Double else { return nil }
             return Limit(id: key, label: label, used: used, resetsAt: parseDate(l["resets_at"] as? String), window: window)
         }
-        return Snapshot(email: email ?? unknownEmail, limits: limits, updated: Date())
+        return Snapshot(email: email ?? unknownEmail, name: name, limits: limits, updated: Date())
     }
 }
 
@@ -417,15 +426,30 @@ struct LimitView: View {
     }
 }
 
+/// "Name · email", the name in medium weight.
+struct AccountLabel: View {
+    let name: String?
+    let email: String
+
+    var body: some View {
+        Label {
+            (name.map { Text($0).fontWeight(.medium) + Text(" · ") } ?? Text("")) + Text(email)
+        } icon: {
+            Image(systemName: "person.crop.circle")
+        }
+        .font(.system(size: 12))
+    }
+}
+
 /// An account that isn't active in the desktop app, from its last-seen numbers: same layout, dimmed.
 struct OtherAccountView: View {
     let snapshot: Snapshot
-    let email: String
+    let account: AccountLabel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Label(email, systemImage: "person.crop.circle").font(.system(size: 12))
+                account
                 Spacer()
                 Text("as of \(clock(snapshot.updated))").font(.system(size: 11))
             }
@@ -444,15 +468,21 @@ struct PopoverView: View {
     @AppStorage("refreshOnOpen") private var refreshOnOpen = true
     /// Display-only stand-ins for screenshots; stored accounts keep their real emails.
     @AppStorage("fakeEmails") private var fakeEmails = false
-    static let fakes = ["alex@example.com", "work@example.com", "sam@example.com", "jo@example.com"]
+    static let fakes = [("Alex", "alex.morgan@example.com"), ("Alex", "alex@studio.example.org"),
+                        ("Sam", "sam.taylor@example.net"), ("Jo", "jo.becker@example.com")]
+
+    /// Name (as the desktop app shows it in its lower-left corner) and email.
+    func account(_ s: Snapshot, fake i: Int) -> AccountLabel {
+        let fake = Self.fakes[i % Self.fakes.count]
+        return fakeEmails ? AccountLabel(name: fake.0, email: fake.1) : AccountLabel(name: s.name, email: s.email)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ClankBar for Claude").font(.system(size: 15, weight: .bold)).padding(.bottom, 8)
             HStack(alignment: .firstTextBaseline) {
                 if let s = model.snapshot {
-                    Label(fakeEmails ? Self.fakes[0] : s.email, systemImage: "person.crop.circle")
-                        .font(.system(size: 12))
+                    account(s, fake: 0)
                 }
                 Spacer()
                 if model.loading { ProgressView().controlSize(.small) }
@@ -479,7 +509,7 @@ struct PopoverView: View {
             }
             ForEach(Array(model.others.enumerated()), id: \.element.email) { i, o in
                 Divider()
-                OtherAccountView(snapshot: o, email: fakeEmails ? Self.fakes[(i + 1) % Self.fakes.count] : o.email)
+                OtherAccountView(snapshot: o, account: account(o, fake: i + 1))
             }
             Divider()
             VStack(alignment: .leading, spacing: 2) {
@@ -493,7 +523,7 @@ struct PopoverView: View {
                         launchAtLogin = SMAppService.mainApp.status == .enabled
                     }
                 CheckRow(title: "Refresh on Open", isOn: $refreshOnOpen)
-                CheckRow(title: "Fake Emails (for Screenshots)", isOn: $fakeEmails)
+                CheckRow(title: "Fake Accounts (for Screenshots)", isOn: $fakeEmails)
                 MenuRow(title: "Quit", icon: "power") { NSApp.terminate(nil) }
             }
         }
