@@ -426,7 +426,8 @@ struct LimitView: View {
     }
 }
 
-/// "Name · email", the name in medium weight.
+/// "Name · email" on one line, the name in medium weight; when it doesn't fit,
+/// the middle is cut at its measured width.
 struct AccountLabel: View {
     let name: String?
     let email: String
@@ -437,7 +438,15 @@ struct AccountLabel: View {
         } icon: {
             Image(systemName: "person.crop.circle")
         }
-        .font(.system(size: 12))
+        .font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+    }
+
+    /// Width the label needs to fit untruncated: icon, spacing and the text measured in its fonts.
+    var idealWidth: CGFloat {
+        let medium = NSFont.systemFont(ofSize: 12, weight: .medium), regular = NSFont.systemFont(ofSize: 12)
+        let text = (name ?? "").size(withAttributes: [.font: medium]).width
+            + ((name.map { _ in " · " } ?? "") + email).size(withAttributes: [.font: regular]).width
+        return 22 + ceil(text)
     }
 }
 
@@ -453,8 +462,8 @@ struct OtherAccountView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 account
-                Spacer()
-                Text(lastSeen(snapshot.updated)).font(.system(size: 11))
+                Spacer(minLength: 8)
+                Text(lastSeen(snapshot.updated)).font(.system(size: 11)).fixedSize()
             }
             .foregroundStyle(.secondary)
             ForEach(snapshot.limits.map { $0.aged() }) { l in
@@ -487,11 +496,11 @@ struct PopoverView: View {
                 if let s = model.snapshot {
                     account(s, fake: 0)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if model.loading { ProgressView().controlSize(.small) }
                 else if let s = model.snapshot {
                     TimelineView(.periodic(from: .now, by: 30)) { _ in
-                        Text(updatedText(s.updated)).font(.system(size: 11))
+                        Text(updatedText(s.updated)).font(.system(size: 11)).fixedSize()
                     }
                 }
             }
@@ -531,7 +540,21 @@ struct PopoverView: View {
             }
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: width)
+    }
+
+    /// Wide enough for every account line to fit, within 300...420; longer emails get cut in the middle.
+    /// Only changes when an account or name first shows up, not as the "Updated" time ticks.
+    var width: CGFloat {
+        let small = { (s: String) in ceil(s.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width) }
+        var lines: [CGFloat] = []
+        if let s = model.snapshot {
+            lines.append(account(s, fake: 0).idealWidth + max(small("Updated just now"), small("Updated 99m ago")))
+        }
+        for (i, o) in model.others.enumerated() {
+            lines.append(account(o, fake: i + 1).idealWidth + small(lastSeen(o.updated)))
+        }
+        return min(420, max(300, (lines.max() ?? 0) + 8 + 2 * 14))
     }
 
     func updatedText(_ d: Date) -> String {
