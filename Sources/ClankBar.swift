@@ -38,6 +38,17 @@ struct Limit: Identifiable, Codable {
 
     var inDeficit: Bool { (expected.map { used - $0 >= 2 }) ?? false }
 
+    /// How worried to look, 0...1, for the bar color. Grows with where the current rate would end
+    /// the window (fine up to 100%, full at 160%), faded in over its first 10% while the rate is
+    /// still jumpy, and as the limit runs low (full at 5% left).
+    var severity: Double {
+        let low = (25 - left) / 20
+        guard let expected, expected > 0 else { return min(1, max(0, low)) }
+        let projected = used / (expected / 100)
+        let pace = min(1, (projected - 100) / 60) * min(1, expected / 10)
+        return min(1, max(0, pace, low))
+    }
+
     /// Only set when the average rate so far would hit the limit before the reset.
     var runsOut: String? {
         guard let resetsAt else { return nil }
@@ -362,17 +373,36 @@ func statusIcon(session: Double?, weekly: Double?) -> NSImage {
 
 // MARK: - Popover UI
 
-func hex(_ v: UInt32) -> Color {
-    Color(red: Double(v >> 16 & 0xFF) / 255, green: Double(v >> 8 & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
-}
+/// Bar gradients by severity: green while you're fine, through amber, to red when far behind or nearly out.
+let gradientStops: [(UInt32, UInt32)] = [
+    (0x9BEA5A, 0x22C98A),  // lime → emerald
+    (0xF7D154, 0xF5A524),  // yellow → amber
+    (0xFF8A5C, 0xFF3D6E),  // coral → raspberry
+]
 
-/// Green while you're fine, red when you're behind pace or nearly out.
-let goodGradient = [hex(0x9BEA5A), hex(0x22C98A)]  // lime → emerald
-let badGradient = [hex(0xFF8A5C), hex(0xFF3D6E)]   // coral → raspberry
+func gradient(severity: Double) -> [Color] {
+    let x = min(1, max(0, severity)) * Double(gradientStops.count - 1)
+    let i = min(Int(x), gradientStops.count - 2), t = x - Double(i)
+    // Blend in hue, the short way round, so in-between colors stay clean instead of going olive.
+    let hsb = { (v: UInt32) -> (h: CGFloat, s: CGFloat, b: CGFloat) in
+        let c = { (shift: UInt32) in CGFloat(v >> shift & 0xFF) / 255 }
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0
+        NSColor(srgbRed: c(16), green: c(8), blue: c(0), alpha: 1).getHue(&h, saturation: &s, brightness: &b, alpha: nil)
+        return (h, s, b)
+    }
+    let mix = { (a: UInt32, b: UInt32) -> Color in
+        let (p, q) = (hsb(a), hsb(b))
+        var dh = q.h - p.h
+        if dh > 0.5 { dh -= 1 } else if dh < -0.5 { dh += 1 }
+        let h = (p.h + dh * t + 1).truncatingRemainder(dividingBy: 1)
+        return Color(hue: h, saturation: p.s + (q.s - p.s) * t, brightness: p.b + (q.b - p.b) * t)
+    }
+    return [mix(gradientStops[i].0, gradientStops[i + 1].0), mix(gradientStops[i].1, gradientStops[i + 1].1)]
+}
 
 /// Fills with what's left, like the menu bar icon, so it shrinks as you use the limit.
 struct UsageBar: View {
-    let bad: Bool
+    let severity: Double
     let left: Double
     /// What would be left if you'd spent evenly so far. Fill ending left of it means you're behind pace.
     let expectedLeft: Double?
@@ -382,7 +412,7 @@ struct UsageBar: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.2))
                 Capsule()
-                    .fill(LinearGradient(colors: bad ? badGradient : goodGradient,
+                    .fill(LinearGradient(colors: gradient(severity: severity),
                                          startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(left > 0 ? 6 : 0, g.size.width * left / 100))
                 if let expectedLeft {
@@ -407,20 +437,20 @@ struct LimitView: View {
                 Spacer()
                 Text("\(Int(limit.left.rounded()))% left").font(.system(size: 12)).monospacedDigit()
             }
-            UsageBar(bad: limit.left <= 10 || limit.inDeficit, left: limit.left, expectedLeft: limit.expected.map { 100 - $0 })
+            UsageBar(severity: limit.severity, left: limit.left, expectedLeft: limit.expected.map { 100 - $0 })
             HStack {
                 if let r = limit.resetsAt { Text("Reset \(relative(r))") }
                 else if let r = limit.wasResetAt { Text("Reset at \(clock(r))") }
                 else { Text("Not started yet") }
                 Spacer()
                 if let p = limit.paceText {
-                    Text(p).foregroundStyle(limit.inDeficit ? Color.orange : Color.secondary)
+                    Text(p).foregroundStyle(limit.inDeficit && limit.severity >= 0.5 ? Color.orange : Color.secondary)
                 }
             }
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
             if let r = limit.runsOut {
-                Text(r).font(.system(size: 11)).foregroundStyle(.orange)
+                Text(r).font(.system(size: 11)).foregroundStyle(limit.severity >= 0.5 ? Color.orange : Color.secondary)
             }
         }
     }
