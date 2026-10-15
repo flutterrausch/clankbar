@@ -441,6 +441,9 @@ struct AccountLabel: View {
     }
 }
 
+/// "Last seen 19:59" next to an account that isn't active.
+func lastSeen(_ date: Date) -> String { "Last seen \(clock(date))" }
+
 /// An account that isn't active in the desktop app, from its last-seen numbers: same layout, dimmed.
 struct OtherAccountView: View {
     let snapshot: Snapshot
@@ -451,7 +454,7 @@ struct OtherAccountView: View {
             HStack(alignment: .firstTextBaseline) {
                 account
                 Spacer()
-                Text("as of \(clock(snapshot.updated))").font(.system(size: 11))
+                Text(lastSeen(snapshot.updated)).font(.system(size: 11))
             }
             .foregroundStyle(.secondary)
             ForEach(snapshot.limits.map { $0.aged() }) { l in
