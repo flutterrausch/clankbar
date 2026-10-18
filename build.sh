@@ -7,7 +7,8 @@ APP=build/ClankBar.app
 if [ -d build ]; then trash build; fi
 mkdir -p "$APP/Contents/MacOS"
 
-swiftc -O -parse-as-library -swift-version 5 -target arm64-apple-macos14.0 \
+# Builds for this Mac's architecture (arm64 or x86_64).
+swiftc -O -parse-as-library -swift-version 5 -target "$(uname -m)-apple-macos14.0" \
   -o "$APP/Contents/MacOS/ClankBar" Sources/ClankBar.swift
 
 cat > "$APP/Contents/Info.plist" <<'EOF'

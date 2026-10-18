@@ -37,7 +37,11 @@ ClankBar picks up the new account on its next refresh, within 2 minutes. To see 
 bash build.sh
 ```
 
-Needs Xcode's Swift toolchain on macOS 14 or later. This builds `ClankBar.app` and installs it to `/Applications`. The app has no dependencies, updater or analytics.
+You need macOS 14 or later and Swift, from either Xcode or Apple's free Command Line Tools. You probably have one of them already, for example because Homebrew installs the Command Line Tools. If not, run `xcode-select --install`.
+
+The script builds `ClankBar.app` for your Mac (Apple silicon or Intel) and installs it to `/Applications`. The app has no dependencies, updater or analytics.
+
+The build is signed locally, not with a developer certificate. Gatekeeper doesn't block it, because macOS only checks apps downloaded from the internet. The first time ClankBar reads `Claude Safe Storage`, macOS asks whether to allow access to that Keychain item. Choose **Always Allow**.
 
 ## How it works and caveats
 

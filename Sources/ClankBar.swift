@@ -531,7 +531,6 @@ struct OtherAccountView: View {
 
 struct PopoverView: View {
     @ObservedObject var model: UsageModel
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("refreshOnOpen") private var refreshOnOpen = true
     /// Display-only stand-ins for screenshots; stored accounts keep their real emails.
     @AppStorage("fakeEmails") private var fakeEmails = false
@@ -584,11 +583,7 @@ struct PopoverView: View {
                 MenuRow(title: "Usage Dashboard", icon: "chart.bar") {
                     NSWorkspace.shared.open(URL(string: "https://claude.ai/settings/usage")!)
                 }
-                CheckRow(title: "Launch at Login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, on in
-                        try? on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
-                        launchAtLogin = SMAppService.mainApp.status == .enabled
-                    }
+                CheckRow(title: "Launch at Login", isOn: launchAtLogin)
                 CheckRow(title: "Refresh on Open", isOn: $refreshOnOpen)
                 CheckRow(title: "Fake Accounts (for Screenshots)", isOn: $fakeEmails)
                 MenuRow(title: "Quit", icon: "power") { NSApp.terminate(nil) }
@@ -610,6 +605,15 @@ struct PopoverView: View {
             lines.append(account(o, fake: i + 1).idealWidth + small(lastSeen(o.updated)))
         }
         return min(420, max(300, (lines.max() ?? 0) + 8 + 2 * 14))
+    }
+
+    // Reads the real status each time, so a failed register shows as unchecked.
+    // (Not @State: with the Command Line Tools and newer SDKs that's a macro whose plugin only ships with Xcode.)
+    var launchAtLogin: Binding<Bool> {
+        Binding(get: { SMAppService.mainApp.status == .enabled }, set: { on in
+            try? on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
+            model.objectWillChange.send()
+        })
     }
 
     func updatedText(_ d: Date) -> String {
@@ -635,7 +639,7 @@ struct MenuRow: View {
     var quietIcon = false
     var showsIcon = true
     let action: () -> Void
-    @State private var hover = false
+    @StateObject private var hover = Hover()
 
     var body: some View {
         Button(action: action) {
@@ -647,14 +651,17 @@ struct MenuRow: View {
             }
             .font(.system(size: 13))
             .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 5).fill(hover ? Color.secondary.opacity(0.15) : .clear))
+            .background(RoundedRectangle(cornerRadius: 5).fill(hover.on ? Color.secondary.opacity(0.15) : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .onHover { hover = $0 }
+        .onHover { hover.on = $0 }
     }
 }
+
+/// Hover flag for MenuRow (see launchAtLogin for why not @State).
+final class Hover: ObservableObject { @Published var on = false }
 
 // MARK: - App
 
