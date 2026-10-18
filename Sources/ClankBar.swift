@@ -5,6 +5,7 @@
 
 import AppKit
 import CommonCrypto
+import Network
 import ServiceManagement
 import SQLite3
 import SwiftUI
@@ -323,6 +324,11 @@ final class UsageModel: ObservableObject {
                 error = nil
                 notice = nil
                 retries = 0
+            } catch where Self.isOffline(error) {
+                // Typically right after boot or wake, before Wi-Fi is up. The path monitor
+                // refreshes as soon as the network is back.
+                notice = "Waiting for a network connection…"
+                retries = 0
             } catch {
                 // While the desktop app switches accounts its cookies are briefly stale or
                 // half-written. Retry quietly a few times before calling it an error.
@@ -339,6 +345,25 @@ final class UsageModel: ObservableObject {
             loading = false
             onChange?()
         }
+    }
+
+    private let pathMonitor = NWPathMonitor()
+
+    func startNetworkMonitor() {
+        pathMonitor.pathUpdateHandler = { path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.snapshot == nil || self.error != nil || self.notice != nil else { return }
+                self.refresh()
+            }
+        }
+        pathMonitor.start(queue: .main)
+    }
+
+    static func isOffline(_ error: Error) -> Bool {
+        guard let e = error as? URLError else { return false }
+        return [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
+                .dnsLookupFailed, .timedOut, .dataNotAllowed, .internationalRoamingOff].contains(e.code)
     }
 
     static func isTransient(_ error: Error) -> Bool {
@@ -686,6 +711,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if self?.panel.isVisible == true { self?.layoutPanel() }
         }
         model.refresh()
+        model.startNetworkMonitor()
+        // After sleep the numbers are stale; if the network isn't back yet, the monitor retries.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.model.refresh() }
+        }
         if CommandLine.arguments.contains("--open") {  // for screenshots / testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.toggle() }
         }
